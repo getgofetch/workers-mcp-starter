@@ -1,5 +1,7 @@
 // Example tool for the starter. Search for REPLACE THIS when you add your own.
 
+import { isBlockedHostname, fetchPublicHtml } from "./safe-url.js";
+
 export const TOOLS = [
   {
     name: "page_title",
@@ -23,42 +25,7 @@ const MAX_BYTES = 512_000;
 const FETCH_MS = 8_000;
 
 export function blockedHost(hostname) {
-  const host = String(hostname || "")
-    .toLowerCase()
-    .replace(/\.+$/, "");
-  if (!host) return true;
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal") ||
-    host === "0.0.0.0" ||
-    host === "::" ||
-    host === "::1" ||
-    host === "[::1]"
-  ) {
-    return true;
-  }
-
-  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const parts = ipv4.slice(1).map((n) => Number(n));
-    if (parts.some((n) => n > 255)) return true;
-    const [a, b] = parts;
-    if (a === 0 || a === 10 || a === 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    return false;
-  }
-
-  if (host.includes(":")) {
-    const h = host.replace(/^\[|\]$/g, "");
-    if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true;
-    if (h.startsWith("::ffff:")) return blockedHost(h.slice(7));
-  }
-  return false;
+  return isBlockedHostname(hostname);
 }
 
 export function parsePublicHttpUrl(value) {
@@ -105,21 +72,23 @@ export async function pageTitle(urlValue, fetchImpl = fetch) {
   const parsed = parsePublicHttpUrl(urlValue);
   if (!parsed.ok) return parsed;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_MS);
   let res;
   try {
-    res = await fetchImpl(parsed.url, {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: { accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1" },
+    res = await fetchPublicHtml(parsed.url, {
+      timeoutMs: FETCH_MS,
+      maxBytes: MAX_BYTES,
+      maxRedirects: 5,
+      fetchImpl,
     });
   } catch (err) {
+    if (err && err.code === "blocked_host") return { ok: false, error: "blocked_host" };
+    if (err && err.code === "invalid_url") return { ok: false, error: "invalid_url" };
     const aborted = err && (err.name === "AbortError" || /abort/i.test(String(err)));
-    return { ok: false, error: aborted ? "timeout" : "fetch_failed" };
-  } finally {
-    clearTimeout(timer);
+    if (aborted) return { ok: false, error: "timeout" };
+    if (err && /too many redirects/i.test(String(err.message || err))) {
+      return { ok: false, error: "too_many_redirects" };
+    }
+    return { ok: false, error: "fetch_failed" };
   }
 
   if (!res.ok) {

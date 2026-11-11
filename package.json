@@ -7,7 +7,7 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "dev": "wrangler dev --local",
-    "check": "node --check src/worker.js src/mcp.js src/tools.js"
+    "check": "node --check src/worker.js src/mcp.js src/tools.js src/safe-url.js"
   },
   "devDependencies": {
     "wrangler": "^4"

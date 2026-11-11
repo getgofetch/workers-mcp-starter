@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { route } from "../src/worker.js";
-import { parsePublicHttpUrl, titleFromHtml, blockedHost } from "../src/tools.js";
+import { parsePublicHttpUrl, titleFromHtml, blockedHost, pageTitle } from "../src/tools.js";
 
 const env = { SERVICE_NAME: "workers-mcp-starter" };
 
@@ -151,4 +151,81 @@ test("URL and HTML helpers", () => {
   assert.equal(parsePublicHttpUrl("https://example.com").ok, true);
   assert.equal(parsePublicHttpUrl("http://169.254.169.254/latest").ok, false);
   assert.equal(titleFromHtml("<title>A &amp; B</title>"), "A & B");
+});
+
+test("blockedHost covers private, mapped, 6to4 and NAT64 addresses", () => {
+  const blocked = [
+    "localhost",
+    "foo.localhost",
+    "printer.local",
+    "127.0.0.1",
+    "127.1",
+    "0.0.0.0",
+    "0.1.2.3",
+    "10.1.2.3",
+    "172.16.0.1",
+    "172.31.255.1",
+    "192.168.0.1",
+    "169.254.169.254",
+    "100.64.0.1",
+    "100.127.1.1",
+    "::1",
+    "[::1]",
+    "fc00::1",
+    "fd12:3456::1",
+    "fe80::1",
+    "::ffff:127.0.0.1",
+    "[::ffff:127.0.0.1]",
+    "::ffff:7f00:1",
+    "2002:7f00:1::",
+    "64:ff9b::7f00:1",
+  ];
+  for (const host of blocked) {
+    assert.equal(blockedHost(host), true, host);
+  }
+
+  const allowed = [
+    "example.com",
+    "8.8.8.8",
+    "1.1.1.1",
+    "172.15.0.1",
+    "172.32.0.1",
+    "100.63.255.255",
+    "100.128.0.1",
+    "2001:4860:4860::8888",
+    "::ffff:8.8.8.8",
+    "2002:0808:0808::",
+    "64:ff9b::808:808",
+  ];
+  for (const host of allowed) {
+    assert.equal(blockedHost(host), false, host);
+  }
+
+  assert.equal(parsePublicHttpUrl("http://[::ffff:127.0.0.1]/").ok, false);
+  assert.equal(parsePublicHttpUrl("http://[::ffff:7f00:1]/").ok, false);
+  assert.equal(parsePublicHttpUrl("http://[2002:7f00:1::]/").ok, false);
+  assert.equal(parsePublicHttpUrl("http://[64:ff9b::7f00:1]/").ok, false);
+  assert.equal(parsePublicHttpUrl("http://127.1/").ok, false);
+  assert.equal(parsePublicHttpUrl("http://printer.local/").ok, false);
+  assert.equal(parsePublicHttpUrl("https://example.com").ok, true);
+  assert.equal(parsePublicHttpUrl("http://[2002:0808:0808::]/").ok, true);
+  assert.equal(parsePublicHttpUrl("http://[64:ff9b::808:808]/").ok, true);
+});
+
+test("page_title blocks a public 302 to 127.1 or 169.254.169.254", async () => {
+  for (const location of ["http://127.1/secret", "http://169.254.169.254/latest"]) {
+    const requested = [];
+    const fetchImpl = mockFetchFactory(async (url, init = {}) => {
+      requested.push({ url: String(url), redirect: init.redirect });
+      if (String(url) === "https://example.com/go") {
+        return new Response(null, { status: 302, headers: { location } });
+      }
+      return new Response("should not be fetched", { status: 200, headers: { "content-type": "text/html" } });
+    });
+    const out = await pageTitle("https://example.com/go", fetchImpl);
+    assert.equal(out.ok, false, location);
+    assert.equal(out.error, "blocked_host", location);
+    assert.deepEqual(requested.map((r) => r.url), ["https://example.com/go"], location);
+    assert.equal(requested[0].redirect, "manual", location);
+  }
 });
