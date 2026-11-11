@@ -1,0 +1,17 @@
+---
+description: Build a stateless Streamable HTTP MCP server on a Cloudflare Worker. Test first, keep secrets out of git, and do not deploy until tests pass.
+globs: wrangler.toml,src/**/*.js,src/**/*.ts
+alwaysApply: false
+---
+
+# MCP on Cloudflare Workers
+
+When the user is building or changing a Worker MCP server:
+
+- Implement MCP as JSON-RPC over stateless Streamable HTTP at `POST /mcp`. Handle `initialize`, `notifications/initialized` (no body, HTTP 202), `ping`, `tools/list` and `tools/call`.
+- Prefer a plain Worker `fetch` handler for a starter. Do not add a framework unless the user asks for one.
+- Keep tool input validation in the Worker. Reject bad input before any network call. Return structured errors the client can read.
+- Do not store secrets in `wrangler.toml` or commit `.dev.vars`. Use wrangler secrets in production.
+- Run `node --test` (or the project's test script) and fix failures before suggesting `wrangler deploy`. A dry-run is fine; a live deploy needs an explicit request.
+- Do not implement JavaScript rendering, login walls, or bypasses. If a page is blocked or needs JS, say so and stop.
+- Leave authentication and rate limiting out unless the user asks for them. If they do, put checks in the Worker before the tool runs.

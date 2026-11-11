@@ -1,0 +1,6 @@
+name = "workers-mcp-starter"
+main = "src/worker.js"
+compatibility_date = "2026-05-01"
+
+[vars]
+SERVICE_NAME = "workers-mcp-starter"
