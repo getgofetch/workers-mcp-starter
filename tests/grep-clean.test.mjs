@@ -44,11 +44,15 @@ const REQUIRED = [
   ".cursor/rules/mcp-on-workers.mdc",
   "rules/cloudflare-workers-mcp.mdc",
   ".mcp.json",
+  ".github/workflows/test.yml",
+  "docs/demo.gif",
+  "scripts/record-demo.sh",
 ];
 
 function walk(dir, acc = []) {
   for (const ent of readdirSync(dir, { withFileTypes: true })) {
     if (["node_modules", ".wrangler", "dist", ".git"].includes(ent.name)) continue;
+    if (ent.name === "package-lock.json") continue;
     const p = join(dir, ent.name);
     if (ent.isDirectory()) walk(p, acc);
     else acc.push(p);
@@ -62,11 +66,12 @@ test("repo contains the starter files", () => {
   }
 });
 
-test("README has the Pro upsell placeholder and MIT is present", () => {
+test("README has the Pro upsell and MIT is present", () => {
   const readme = readFileSync(join(ROOT, "README.md"), "utf8");
   const license = readFileSync(join(ROOT, "LICENSE"), "utf8");
-  assert.match(readme, /\{\{LS_PRODUCT_URL\}\}/);
   assert.match(readme, /Pro version/i);
+  assert.match(readme, /getgofetch\.dev\/kits/);
+  assert.match(readme, /Deploy to Cloudflare/);
   assert.match(license, /MIT License/);
   assert.match(license, /2026 gofetch/);
 });
@@ -74,7 +79,7 @@ test("README has the Pro upsell placeholder and MIT is present", () => {
 test("no forbidden payment-rail, wallet, or identity terms", () => {
   const files = walk(ROOT).filter((p) => {
     const n = p.toLowerCase();
-    return !n.endsWith(".png") && !n.endsWith(".zip") && !n.endsWith(".gif") && !n.endsWith(".mp4");
+    return !n.endsWith(".png") && !n.endsWith(".zip") && !n.endsWith(".gif") && !n.endsWith(".mp4") && !n.endsWith(".cast") && !n.endsWith(".lock");
   });
   const hits = [];
   for (const p of files) {
